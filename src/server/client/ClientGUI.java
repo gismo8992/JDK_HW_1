@@ -1,12 +1,10 @@
 package server.client;
-
 import server.server.ServerWindow;
-
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 
-public class ClientGUI extends JFrame {
+public class ClientGUI extends JFrame implements ClientVIew {
     private static final int WIDTH = 400;
     private static final int HEIGHT = 300;
     private JTextArea log;
@@ -16,18 +14,16 @@ public class ClientGUI extends JFrame {
     private JTextField tfLogin;
     private JPasswordField tfPassword;
     private JButton btnLogin;
-
     private JPanel panelBottom;
     private JTextField tfMessage;
     private JButton btnSend;
-    private boolean connected; // флаг подключения
-    private ServerWindow server;
-    private String name; // имя пользователя
+    private Client client; // мозг программы (будет выполняться логика клиента)
 
     public ClientGUI(ServerWindow server) {
-        this.server = server; // сразу при создании пользователя сохраняем сервер в поле
+        client = new Client(this, server.getConnection());
+        // сразу при создании пользователя сохраняем сервер в поле
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setLocationRelativeTo(server);
+        setLocation(server.getX() - 500, server.getY());
         setSize(WIDTH, HEIGHT);
         setTitle("ChatClient");
         createPanel();
@@ -93,7 +89,7 @@ public class ClientGUI extends JFrame {
             @Override
             public void keyTyped(KeyEvent e) {
                 if (e.getKeyChar() == '\n') { // если нажат enter (символ переноса),
-                    message(); // то отправляем сообщение
+                    sendMessage(); // то отправляем сообщение
                 }
             }
         });
@@ -101,7 +97,7 @@ public class ClientGUI extends JFrame {
         btnSend.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                message();
+                sendMessage();
             }
         });
         panelBottom.add(tfMessage, BorderLayout.CENTER);
@@ -110,75 +106,70 @@ public class ClientGUI extends JFrame {
     }
 
     /**
-     * Метод подключения текущего пользователя к серверу.
+     * Метод для отправки сообщения. Используется при нажатии на кнопку send
      */
-    private void connectToServer() {
-        if (server.connectUser(this)) {
-            appendLog("Вы успешно подключились!\n");
-            panelTop.setVisible(false);
-            connected = true;
-            name = tfLogin.getText();
-            String log = server.getLog();
-            if (log != null) {
-                appendLog(log);
-            }
-        } else {
-            appendLog("Подключение не удалось");
-        }
-    }
-
-    /**
-     * Метод отключения текущего пользователя от сервера.
-     */
-    public void disconnectFromServer() {
-        if (connected) { // если подключен
-            panelTop.setVisible(true); // отображаем панель для ввода данных, чтобы можно было обратно подключиться
-            connected = false; // отключаем
-            server.disconnectUser(this); // вызываем метод отключения пользователя у сервера
-            appendLog("Вы были отключены от сервера!");
-        }
-    }
-
-    /**
-     * Метод добавления текста сообщения в лог.
-     * @param text
-     */
-    private void appendLog(String text) {
-        log.append(text + "\n");
-    }
-
-    /** Метод, который использует сервер, когда хочет отправить сообщение клиенту.
-     * @param text отправленный текст.
-     */
-    public void answer(String text) {
-        appendLog(text); // отображаем текст в текстовом поле
-    }
-
-    /**
-     * Метод вызывается по кнопке send или клавише enter и
-     */
-    public void message() {
-        if (connected) {
-            String text = tfMessage.getText(); // получает текст из текстового поля
-            if (!text.equals("")) { // если текст не пустой
-                server.message(name + ": " + text); // обращается к серверу и пишем, от кого это сообщение
-                tfMessage.setText(""); // обнуляем текстовое поле
-            }
-        } else {
-            appendLog("Нет подключения к серверу");
-        }
-
+    private void sendMessage(){
+        client.sendMessage(tfMessage.getText());
+        tfMessage.setText("");
     }
 
     /**
      * Метод отключение пользователя от сервера при закрытии окна пользователя.
-     * @param e  the window event
+     *
+     * @param e the window event
      */
     @Override
     protected void processWindowEvent(WindowEvent e) {
         if (e.getID() == WindowEvent.WINDOW_CLOSING) { // если текущее событие - закрытие окна
-            disconnectFromServer(); // то отключаемся от сервера
+            disconnectServer(); // то отключаемся от сервера
         }
         super.processWindowEvent(e);
+    }
+
+    /**
+     * Метод вывода текста на экран GUI
+     * @param message текст, который требуется отобразить на экране
+     */
+    @Override
+    public void showMessage(String message) {
+        log.append(message + "\n");
+    }
+
+    /**
+     * Метод, описывающий отключение клиента от сервера со стороны сервера
+     */
+    @Override
+    public void disconnectedFromServer(){
+        hideHeaderPanel(true);
+    }
+
+    /**
+     * Метод, описывающий отключение клиента от сервера со стороны клиента
+     */
+    public void disconnectServer(){
+        client.disconnectFromServer();
+    }
+
+    private void connectToServer() { // срабатываем при нажатии на кнопку login
+        if (client.connectToServer(tfLogin.getText())) {
+            hideHeaderPanel(false);
+        }
+    }
+
+    /**
+     * Метод изменения видимости верхней панели экрана, на которой виджеты для авторизации (например кнопка логин)
+     * @param visible true, если надо сделать панель видимой
+     */
+    private void hideHeaderPanel(boolean visible) {
+        panelTop.setVisible(visible);
+    }
+
+    /**
+     * Метод, срабатывающий при нажатии кнопки авторизации
+     */
+    public void login(){
+        if (client.connectToServer(tfLogin.getText())){
+            panelTop.setVisible(false);
+        }
     }
 }
